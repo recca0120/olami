@@ -11,7 +11,7 @@
     ],
     "require": {
         "ext-json": "*",
-        "nesbot/carbon": "^1.3.4 || ^2.5",
+        "nesbot/carbon": "^1.34.4 || ^2.5",
         "php-http/client-implementation": "1.0",
         "php-http/discovery": "^1.4",
         "php-http/message": "^1.7",
@@ -33,7 +33,8 @@
         "phpunit/phpunit": "^7.4",
         "mockery/mockery": "^1.2",
         "vlucas/phpdotenv": "^2.5",
-        "php-http/guzzle6-adapter": "^1.1"
+        "php-http/guzzle6-adapter": "^1.1",
+        "illuminate/support": "^5.1"
     },
     "scripts": {
         "fix": [
