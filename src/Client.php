@@ -2,28 +2,47 @@
 
 namespace Recca0120\Olami;
 
+use Exception;
 use Carbon\Carbon;
-use Http\Client\Common\Plugin\CookiePlugin;
-use Http\Client\Common\PluginClient;
-use Http\Client\Exception\HttpException;
 use Http\Client\HttpClient;
-use Http\Discovery\HttpClientDiscovery;
-use Http\Discovery\MessageFactoryDiscovery;
 use Http\Message\CookieJar;
 use Http\Message\MessageFactory;
+use Http\Client\Common\PluginClient;
+use Http\Discovery\HttpClientDiscovery;
+use Http\Client\Common\Plugin\CookiePlugin;
+use Http\Discovery\MessageFactoryDiscovery;
 use Http\Message\MultipartStream\MultipartStreamBuilder;
-use PharIo\Manifest\AuthorCollection;
 
 class Client
 {
-    private $endpoint = 'https://tw.olami.ai/cloudservice/api';
+    /**
+     * @var string
+     */
+    private $endpoint = 'https://tw.olami.ai/';
+
+    /**
+     * @var string
+     */
     private $apiKey;
+
+    /**
+     * @var \Recca0120\Olami\Hasher
+     */
     private $hasher;
+
+    /**
+     * @var \Http\Client\Common\PluginClient
+     */
     private $client;
+
+    /**
+     * @var \Http\Message\MessageFactory
+     */
     private $messageFactory;
 
     /**
      * Client constructor.
+     *
      * @param $apiKey
      * @param $apiSecret
      * @param HttpClient|null $client
@@ -43,91 +62,12 @@ class Client
     }
 
     /**
-     * @param $params
-     * @return mixed
+     * @param array $params
+     *
+     * @return mixed|\Psr\Http\Message\ResponseInterface
      * @throws \Http\Client\Exception
      */
     public function query($params)
-    {
-        if (empty($params['sound']) === false) {
-            $response = $this->sendFile($params);
-            unset($params['sound']);
-
-            if ($response['status'] === 'ok') {
-                do {
-                    $response = $this->sendRequest(array_merge($params, [
-                        'stop' => 1,
-                    ]));
-                } while ($this->isfinished($response) !== true);
-
-                return $response;
-            }
-
-            throw new HttpException;
-        }
-
-        return $this->sendRequest($params);
-    }
-
-    /**
-     * @param $response
-     * @return bool
-     */
-    private function isFinished($response)
-    {
-        if (Arr::get($response, 'data.asr.status') >= 2) {
-            throw new HttpException(Arr::get($response, 'data.asr.msg'));
-        }
-
-        $finished = (bool)Arr::get($response, 'data.asr.final') === true;
-
-        if ($finished === false) {
-            sleep(2);
-        }
-
-        return $finished;
-    }
-
-    /**
-     * @param $params
-     * @return mixed
-     * @throws \Http\Client\Exception
-     */
-    private function sendFile($params)
-    {
-        $params = $this->prepareParams($params);
-        list($boundary, $multipartStream) = $this->buildStream($params);
-
-        return $this->decode(
-            $this->messageFactory->createRequest(
-                'POST',
-                $this->endpoint,
-                ['Content-Type' => 'multipart/form-data; boundary="' . $boundary . '"'],
-                $multipartStream
-            )
-        );
-    }
-
-    /**
-     * @param $params
-     * @return mixed
-     * @throws \Http\Client\Exception
-     */
-    private function sendRequest($params)
-    {
-        return $this->decode(
-            $this->messageFactory->createRequest(
-                'GET',
-                $this->endpoint . '?' . http_build_query($this->prepareParams($params))
-            )
-        );
-    }
-
-    /**
-     * @param $params
-     * @return array
-     */
-    private function prepareParams($params)
     {
         $params = array_merge([
             'api' => 'asr',
@@ -144,35 +84,111 @@ class Client
         $params['rq'] = is_array($params['rq']) === true ? json_encode($params['rq']) : $params['rq'];
         $params['sign'] = $this->hasher->make($params);
 
-        return $params;
+        $uri = 'cloudservice/api';
+
+        $params = $this->hasSound($params) ? $this->queryBySound($params, $uri) : $params;
+
+        return $this->queryByText($params, $uri);
     }
 
     /**
-     * @param $params
-     * @return array
+     * @param array $params
+     *
+     * @return mixed|\Psr\Http\Message\ResponseInterface
+     * @throws \Http\Client\Exception
      */
-    private function buildStream($params)
+    public function speech($params)
+    {
+        $params = array_merge([
+            'txt' => '歐拉蜜你好',
+            'speed' => 1.1,
+        ], $params);
+
+        return $this->sendRequest('tts/create?'.http_build_query($params));
+    }
+
+    /**
+     * @param string $uri
+     * @param string $method
+     * @param array $headers
+     * @param null $body
+     *
+     * @return mixed|\Psr\Http\Message\ResponseInterface
+     * @throws \Http\Client\Exception
+     */
+    private function sendRequest($uri, $method = 'GET', $headers = [], $body = null)
+    {
+        $request = $this->messageFactory->createRequest($method, $this->endpoint.$uri, $headers, $body);
+        $response = $this->client->sendRequest($request);
+
+        return json_decode($response->getBody()->getContents(), true);
+    }
+
+    /**
+     * @param array $params
+     *
+     * @return bool
+     */
+    private function hasSound($params)
+    {
+        return empty($params['sound']) === false;
+    }
+
+    /**
+     * @param array $params
+     * @param string $uri
+     *
+     * @return mixed
+     * @throws \Http\Client\Exception
+     */
+    private function queryBySound($params, $uri)
     {
         $builder = new MultipartStreamBuilder();
-
         foreach ($params as $key => $value) {
             file_exists($value) === true
                 ? $builder->addResource($key, fopen($value, 'r'), ['filename' => $value])
                 : $builder->addResource($key, $value);
         }
 
-        return [$builder->getBoundary(), $builder->build()];
+        $headers = ['Content-Type' => 'multipart/form-data; boundary="'.$builder->getBoundary().'"'];
+        $body = $builder->build();
+        $this->sendRequest($uri, 'POST', $headers, $body);
+
+        unset($params['sound']);
+
+        return $params;
     }
 
     /**
-     * @param $request
-     * @return array
+     * @param array $params
+     * @param string $uri
+     *
+     * @return mixed|\Psr\Http\Message\ResponseInterface
      * @throws \Http\Client\Exception
      */
-    private function decode($request)
+    private function queryByText($params, $uri)
     {
-        $response = $this->client->sendRequest($request);
+        while (true) {
+            $response = $this->sendRequest($uri.'?'.http_build_query($params));
 
-        return json_decode($response->getBody()->getContents(), true);
+            $status = Arr::get($response, 'status');
+            $nli = Arr::get($response, 'data.nli');
+
+            if (Arr::get($response, 'data.asr.status') >= 2) {
+                throw new Exception(Arr::get($response, 'data.asr.msg'));
+            }
+
+            if ($status !== 'ok') {
+                throw new Exception(Arr::get($response, 'msg'), Arr::get($response, 'code'));
+            }
+
+            if (empty($nli) === false) {
+                return $response;
+            }
+
+            sleep(1);
+        }
+
+        throw new Exception('Unknown Error');
     }
 }

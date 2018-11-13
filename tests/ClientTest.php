@@ -2,16 +2,15 @@
 
 namespace Recca0120\Olami\Tests;
 
+use Recca0120\Olami\Client;
+use PHPUnit\Framework\TestCase;
 use Http\Discovery\HttpClientDiscovery;
 use Http\Discovery\MessageFactoryDiscovery;
-use PHPUnit\Framework\TestCase;
-use Recca0120\Olami\Client;
 
 class ClientTest extends TestCase
 {
-    /**
-     *
-     */
+    private $client;
+
     protected function setUp()
     {
         parent::setUp();
@@ -19,16 +18,15 @@ class ClientTest extends TestCase
         if (isset($_ENV['APP_KEY']) === false || isset($_ENV['APP_SECRET']) === false) {
             $this->markTestSkipped('APP_KEY or APP_SECRET not exists');
         }
-    }
 
-    /** @test */
-    public function test_query_nli()
-    {
         $httpClient = HttpClientDiscovery::find();
         $messageFactory = MessageFactoryDiscovery::find();
 
-        $client = new Client($_ENV['APP_KEY'], $_ENV['APP_SECRET'], $httpClient, $messageFactory);
+        $this->client = new Client($_ENV['APP_KEY'], $_ENV['APP_SECRET'], $httpClient, $messageFactory);
+    }
 
+    public function test_query_nli()
+    {
         $params = [
             'api' => 'nli',
             'rq' => [
@@ -40,17 +38,11 @@ class ClientTest extends TestCase
             ],
         ];
 
-        $this->assertArraySubset(['status' => 'ok'], $client->query($params));
+        $this->assertArraySubset(['status' => 'ok'], $this->client->query($params));
     }
 
-    /** @test */
     public function test_query_asr()
     {
-        $httpClient = HttpClientDiscovery::find();
-        $messageFactory = MessageFactoryDiscovery::find();
-
-        $client = new Client($_ENV['APP_KEY'], $_ENV['APP_SECRET'], $httpClient, $messageFactory);
-
         $params = [
             'api' => 'asr',
             'sound' => __DIR__.'/sample.wav',
@@ -63,6 +55,6 @@ class ClientTest extends TestCase
                 ],
             ],
             'status' => 'ok',
-        ], $client->query($params));
+        ], $this->client->query($params));
     }
 }

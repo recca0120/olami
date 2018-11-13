@@ -4,10 +4,14 @@ namespace Recca0120\Olami;
 
 class Hasher
 {
+    /**
+     * @var string
+     */
     private $appSecret = '';
 
     /**
      * Hasher constructor.
+     *
      * @param string $appSecret
      */
     public function __construct($appSecret = '')
@@ -17,6 +21,7 @@ class Hasher
 
     /**
      * @param $appSecret
+     *
      * @return $this
      */
     public function setAppSecret($appSecret)
@@ -27,7 +32,8 @@ class Hasher
     }
 
     /**
-     * @param $values
+     * @param array $values
+     *
      * @return string
      */
     public function make($values)
