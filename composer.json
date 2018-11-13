@@ -41,5 +41,12 @@
             "php-cs-fixer fix src",
             "php-cs-fixer fix tests"
         ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Recca0120\\Olami\\OlamiServiceProvider"
+            ]
+        }
     }
 }
