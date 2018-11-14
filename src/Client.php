@@ -66,7 +66,8 @@ class Client
      *
      * @return $this
      */
-    public function setEndpoint($endpoint) {
+    public function setEndpoint($endpoint)
+    {
         $this->endpoint = $endpoint;
 
         return $this;
