@@ -14,7 +14,7 @@ class OlamiServiceProvider extends ServiceProvider
             $client = new Client($config['services.olami.key'], $config['services.olami.secret']);
 
             if (empty($config['services.olami.endpoint']) === false) {
-                $client->setHost($config['services.olami.host']);
+                $client->setEndpoint($config['services.olami.endpoint']);
             }
 
             return $client;
