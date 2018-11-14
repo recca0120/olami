@@ -62,6 +62,17 @@ class Client
     }
 
     /**
+     * @param $endpoint
+     *
+     * @return $this
+     */
+    public function setEndpoint($endpoint) {
+        $this->endpoint = $endpoint;
+
+        return $this;
+    }
+
+    /**
      * @param array $params
      *
      * @return mixed|\Psr\Http\Message\ResponseInterface
@@ -155,6 +166,8 @@ class Client
         $this->sendRequest($uri, 'POST', $headers, $body);
 
         unset($params['sound']);
+
+        sleep(1);
 
         return $params;
     }
