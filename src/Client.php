@@ -18,7 +18,7 @@ class Client
     /**
      * @var string
      */
-    private $endpoint = 'https://tw.olami.ai/';
+    private $host = 'https://tw.olami.ai/';
 
     /**
      * @var string
@@ -62,13 +62,13 @@ class Client
     }
 
     /**
-     * @param $endpoint
+     * @param $host
      *
      * @return $this
      */
-    public function setEndpoint($endpoint)
+    public function setHost($host)
     {
-        $this->endpoint = $endpoint;
+        $this->host = $host;
 
         return $this;
     }
@@ -130,7 +130,7 @@ class Client
      */
     private function sendRequest($uri, $method = 'GET', $headers = [], $body = null)
     {
-        $request = $this->messageFactory->createRequest($method, $this->endpoint.$uri, $headers, $body);
+        $request = $this->messageFactory->createRequest($method, $this->host.$uri, $headers, $body);
         $response = $this->client->sendRequest($request);
 
         return json_decode($response->getBody()->getContents(), true);
