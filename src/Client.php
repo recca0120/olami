@@ -39,10 +39,6 @@ class Client
      * @var \Http\Message\MessageFactory
      */
     private $messageFactory;
-    /**
-     * @var \Recca0120\Olami\AudioConverter
-     */
-    private $audioConverter;
 
     /**
      * Client constructor.
@@ -51,15 +47,9 @@ class Client
      * @param $apiSecret
      * @param HttpClient|null $client
      * @param MessageFactory|null $messageFactory
-     * @param \Recca0120\Olami\AudioConverter|null $audioConverter
      */
-    public function __construct(
-        $apiKey,
-        $apiSecret,
-        HttpClient $client = null,
-        MessageFactory $messageFactory = null,
-        AudioConverter $audioConverter = null
-    ) {
+    public function __construct($apiKey, $apiSecret, HttpClient $client = null, MessageFactory $messageFactory = null)
+    {
         $this->apiKey = $apiKey;
         $this->hasher = $apiSecret instanceof Hasher ? $apiSecret : new Hasher($apiSecret);
         $this->client = new PluginClient(
@@ -69,7 +59,6 @@ class Client
         );
 
         $this->messageFactory = $messageFactory ?: MessageFactoryDiscovery::find();
-        $this->audioConverter = $audioConverter ?: new AudioConverter();
     }
 
     /**
@@ -155,7 +144,7 @@ class Client
         $builder = new MultipartStreamBuilder();
         foreach ($params as $key => $value) {
             is_file($value) === true
-                ? $builder->addResource($key, $this->reRateSample($value), ['filename' => $value])
+                ? $builder->addResource($key, fopen($value, 'r'), ['filename' => $value])
                 : $builder->addResource($key, $value);
         }
 
@@ -228,15 +217,5 @@ class Client
         $params['sign'] = $this->hasher->make($params);
 
         return $params;
-    }
-
-    /**
-     * @param $file
-     *
-     * @return bool|resource
-     */
-    private function reRateSample($file)
-    {
-        return fopen($this->audioConverter->convert($file), 'r');
     }
 }
