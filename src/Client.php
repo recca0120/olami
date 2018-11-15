@@ -12,6 +12,8 @@ use Http\Discovery\HttpClientDiscovery;
 use Http\Client\Common\Plugin\CookiePlugin;
 use Http\Discovery\MessageFactoryDiscovery;
 use Http\Message\MultipartStream\MultipartStreamBuilder;
+use Symfony\Component\Process\ExecutableFinder;
+use Symfony\Component\Process\Process;
 
 class Client
 {
@@ -39,6 +41,10 @@ class Client
      * @var \Http\Message\MessageFactory
      */
     private $messageFactory;
+    /**
+     * @var \Symfony\Component\Process\ExecutableFinder
+     */
+    private $executableFinder;
 
     /**
      * Client constructor.
@@ -47,8 +53,9 @@ class Client
      * @param $apiSecret
      * @param HttpClient|null $client
      * @param MessageFactory|null $messageFactory
+     * @param \Symfony\Component\Process\ExecutableFinder|null $executableFinder
      */
-    public function __construct($apiKey, $apiSecret, HttpClient $client = null, MessageFactory $messageFactory = null)
+    public function __construct($apiKey, $apiSecret, HttpClient $client = null, MessageFactory $messageFactory = null, ExecutableFinder $executableFinder = null)
     {
         $this->apiKey = $apiKey;
         $this->hasher = $apiSecret instanceof Hasher ? $apiSecret : new Hasher($apiSecret);
@@ -59,6 +66,7 @@ class Client
         );
 
         $this->messageFactory = $messageFactory ?: MessageFactoryDiscovery::find();
+        $this->executableFinder = $executableFinder ?: new ExecutableFinder();
     }
 
     /**
@@ -81,26 +89,11 @@ class Client
      */
     public function query($params)
     {
-        $params = array_merge([
-            'api' => 'asr',
-            'appkey' => $this->apiKey,
-            'timestamp' => Carbon::now()->getTimestamp(),
-            'seq' => 'seg,nli',
-            'stop' => 1,
-            'compress' => 0,
-            'cusid' => '',
-            'rq' => [],
-        ], $params);
-
-        $params['timestamp'] = $params['timestamp'] * 1000;
-        $params['rq'] = is_array($params['rq']) === true ? json_encode($params['rq']) : $params['rq'];
-        $params['sign'] = $this->hasher->make($params);
-
         $uri = 'cloudservice/api';
 
-        $params = $this->hasSound($params) ? $this->queryBySound($params, $uri) : $params;
-
-        return $this->queryByText($params, $uri);
+        return $this->hasSound($params) === true
+            ? $this->queryBySound($params, $uri)
+            : $this->queryByText($params, $uri);
     }
 
     /**
@@ -116,7 +109,7 @@ class Client
             'speed' => 1.1,
         ], $params);
 
-        return $this->sendRequest('tts/create?'.http_build_query($params));
+        return $this->sendRequest('tts/create?' . http_build_query($params));
     }
 
     /**
@@ -130,7 +123,7 @@ class Client
      */
     private function sendRequest($uri, $method = 'GET', $headers = [], $body = null)
     {
-        $request = $this->messageFactory->createRequest($method, $this->endpoint.$uri, $headers, $body);
+        $request = $this->messageFactory->createRequest($method, $this->endpoint . $uri, $headers, $body);
         $response = $this->client->sendRequest($request);
 
         return json_decode($response->getBody()->getContents(), true);
@@ -155,22 +148,39 @@ class Client
      */
     private function queryBySound($params, $uri)
     {
+        $params = $this->prepare($params);
         $builder = new MultipartStreamBuilder();
         foreach ($params as $key => $value) {
-            file_exists($value) === true
-                ? $builder->addResource($key, fopen($value, 'r'), ['filename' => $value])
+            is_file($value) === true
+                ? $builder->addResource($key, $this->reRateSample($value), ['filename' => $value])
                 : $builder->addResource($key, $value);
         }
 
-        $headers = ['Content-Type' => 'multipart/form-data; boundary="'.$builder->getBoundary().'"'];
+        $headers = ['Content-Type' => 'multipart/form-data; boundary="' . $builder->getBoundary() . '"'];
         $body = $builder->build();
         $this->sendRequest($uri, 'POST', $headers, $body);
 
         unset($params['sound']);
+        unset($params['timestamp']);
 
-        sleep(1);
+        while (true) {
+            sleep(1);
 
-        return $params;
+            $response = $this->queryByText(array_merge($params, [
+                'stop' => 1,
+            ]), $uri);
+
+            $nli = Arr::get($response, 'data.nli');
+
+            if (Arr::get($response, 'data.asr.status') >= 2) {
+                throw new Exception(Arr::get($response, 'data.asr.msg'));
+            }
+
+            if (empty($nli) === false) {
+                return $response;
+            }
+
+        }
     }
 
     /**
@@ -182,27 +192,56 @@ class Client
      */
     private function queryByText($params, $uri)
     {
-        while (true) {
-            $response = $this->sendRequest($uri.'?'.http_build_query($params));
+        $params = $this->prepare($params);
+        $response = $this->sendRequest($uri . '?' . http_build_query($params));
+        $status = Arr::get($response, 'status');
 
-            $status = Arr::get($response, 'status');
-            $nli = Arr::get($response, 'data.nli');
-
-            if (Arr::get($response, 'data.asr.status') >= 2) {
-                throw new Exception(Arr::get($response, 'data.asr.msg'));
-            }
-
-            if ($status !== 'ok') {
-                throw new Exception(Arr::get($response, 'msg'), Arr::get($response, 'code'));
-            }
-
-            if (empty($nli) === false) {
-                return $response;
-            }
-
-            sleep(1);
+        if ($status !== 'ok') {
+            throw new Exception(Arr::get($response, 'msg'), Arr::get($response, 'code'));
         }
 
-        throw new Exception('Unknown Error');
+        return $response;
+    }
+
+    /**
+     * @param $params
+     *
+     * @return array
+     */
+    private function prepare($params)
+    {
+        $params = array_merge([
+            'api' => 'asr',
+            'appkey' => $this->apiKey,
+            'timestamp' => Carbon::now()->getTimestamp(),
+            'seq' => 'seg,nli',
+            'stop' => 1,
+            'compress' => 0,
+            'cusid' => '',
+            'rq' => [],
+        ], $params);
+
+        $params['timestamp'] = $params['timestamp'] * 1000;
+        $params['rq'] = is_array($params['rq']) === true ? json_encode($params['rq']) : $params['rq'];
+        $params['sign'] = $this->hasher->make($params);
+
+        return $params;
+    }
+
+    /**
+     * @param $file
+     *
+     * @return bool|resource
+     */
+    private function reRateSample($file)
+    {
+        $binary = $this->executableFinder->find('ffmpeg1');
+
+        if ($binary) {
+            $process = new Process([$binary, '-i', $file, '-acodec', 'pcm_s161e', '-ac', '1', '-ar', 16000, $file]);
+            $process->run();
+        }
+
+        return fopen($file, 'r');
     }
 }
