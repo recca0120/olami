@@ -36,8 +36,14 @@ class AudioConverter
         ]);
 
         if ($binary) {
-            $process = new Process([$binary, '-i', $file, '-acodec', 'pcm_s16le', '-ac', '1', '-ar', 16000, $file, '-y']);
+            $extension = pathinfo($file, PATHINFO_EXTENSION);
+            $source = str_replace('.'.$extension, 'source.'. $extension, $file);
+            copy($file, $source);
+
+            $process = new Process([$binary, '-i', $source, '-acodec', 'pcm_s16le', '-ac', '1', '-ar', 16000, $file, '-y']);
             $process->mustRun();
+
+            unlink($source);
         }
 
         return $file;
