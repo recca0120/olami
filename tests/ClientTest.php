@@ -43,9 +43,11 @@ class ClientTest extends TestCase
 
     public function test_query_asr()
     {
+        copy(__DIR__.'/sample2-441k.wav', __DIR__.'/sample2.wav');
+
         $params = [
             'api' => 'asr',
-            'sound' => __DIR__.'/sample.wav',
+            'sound' => __DIR__.'/sample2.wav',
         ];
 
         $this->assertArraySubset([

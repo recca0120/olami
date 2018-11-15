@@ -12,8 +12,6 @@ use Http\Discovery\HttpClientDiscovery;
 use Http\Client\Common\Plugin\CookiePlugin;
 use Http\Discovery\MessageFactoryDiscovery;
 use Http\Message\MultipartStream\MultipartStreamBuilder;
-use Symfony\Component\Process\ExecutableFinder;
-use Symfony\Component\Process\Process;
 
 class Client
 {
@@ -42,9 +40,9 @@ class Client
      */
     private $messageFactory;
     /**
-     * @var \Symfony\Component\Process\ExecutableFinder
+     * @var \Recca0120\Olami\AudioConverter
      */
-    private $executableFinder;
+    private $audioConverter;
 
     /**
      * Client constructor.
@@ -53,10 +51,15 @@ class Client
      * @param $apiSecret
      * @param HttpClient|null $client
      * @param MessageFactory|null $messageFactory
-     * @param \Symfony\Component\Process\ExecutableFinder|null $executableFinder
+     * @param \Recca0120\Olami\AudioConverter|null $audioConverter
      */
-    public function __construct($apiKey, $apiSecret, HttpClient $client = null, MessageFactory $messageFactory = null, ExecutableFinder $executableFinder = null)
-    {
+    public function __construct(
+        $apiKey,
+        $apiSecret,
+        HttpClient $client = null,
+        MessageFactory $messageFactory = null,
+        AudioConverter $audioConverter = null
+    ) {
         $this->apiKey = $apiKey;
         $this->hasher = $apiSecret instanceof Hasher ? $apiSecret : new Hasher($apiSecret);
         $this->client = new PluginClient(
@@ -66,7 +69,7 @@ class Client
         );
 
         $this->messageFactory = $messageFactory ?: MessageFactoryDiscovery::find();
-        $this->executableFinder = $executableFinder ?: new ExecutableFinder();
+        $this->audioConverter = $audioConverter ?: new AudioConverter();
     }
 
     /**
@@ -109,7 +112,7 @@ class Client
             'speed' => 1.1,
         ], $params);
 
-        return $this->sendRequest('tts/create?' . http_build_query($params));
+        return $this->sendRequest('tts/create?'.http_build_query($params));
     }
 
     /**
@@ -123,7 +126,7 @@ class Client
      */
     private function sendRequest($uri, $method = 'GET', $headers = [], $body = null)
     {
-        $request = $this->messageFactory->createRequest($method, $this->endpoint . $uri, $headers, $body);
+        $request = $this->messageFactory->createRequest($method, $this->endpoint.$uri, $headers, $body);
         $response = $this->client->sendRequest($request);
 
         return json_decode($response->getBody()->getContents(), true);
@@ -156,7 +159,7 @@ class Client
                 : $builder->addResource($key, $value);
         }
 
-        $headers = ['Content-Type' => 'multipart/form-data; boundary="' . $builder->getBoundary() . '"'];
+        $headers = ['Content-Type' => 'multipart/form-data; boundary="'.$builder->getBoundary().'"'];
         $body = $builder->build();
         $this->sendRequest($uri, 'POST', $headers, $body);
 
@@ -179,7 +182,6 @@ class Client
             if (empty($nli) === false) {
                 return $response;
             }
-
         }
     }
 
@@ -193,7 +195,7 @@ class Client
     private function queryByText($params, $uri)
     {
         $params = $this->prepare($params);
-        $response = $this->sendRequest($uri . '?' . http_build_query($params));
+        $response = $this->sendRequest($uri.'?'.http_build_query($params));
         $status = Arr::get($response, 'status');
 
         if ($status !== 'ok') {
@@ -235,13 +237,6 @@ class Client
      */
     private function reRateSample($file)
     {
-        $binary = $this->executableFinder->find('ffmpeg1');
-
-        if ($binary) {
-            $process = new Process([$binary, '-i', $file, '-acodec', 'pcm_s161e', '-ac', '1', '-ar', 16000, $file]);
-            $process->run();
-        }
-
-        return fopen($file, 'r');
+        return fopen($this->audioConverter->convert($file), 'r');
     }
 }
