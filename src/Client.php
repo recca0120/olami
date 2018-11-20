@@ -162,13 +162,13 @@ class Client
                 'stop' => 1,
             ]), $uri);
 
-            $nli = Arr::get($response, 'data.nli');
-
-            if (Arr::get($response, 'data.asr.status') >= 2) {
-                throw new Exception(Arr::get($response, 'data.asr.msg'));
+            $asr = Arr::get($response, 'data.asr');
+            if (empty($asr) === true || Arr::get($asr, 'status') >= 2) {
+                throw new Exception(Arr::get($asr, 'msg', 'unknown'));
             }
 
-            if (empty($nli) === false) {
+            $nli = Arr::get($response, 'data.nli');
+            if (empty($nli) === false || (boolean) Arr::get($asr, 'final') === true) {
                 return $response;
             }
         }
